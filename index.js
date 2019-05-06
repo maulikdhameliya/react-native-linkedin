@@ -130,7 +130,7 @@ export const fetchToken: string => Promise<LinkedInToken> = async payload => {
 
 export const logError = (error: ErrorType) =>
   // eslint-disable-next-line
-  console.error(JSON.stringify(error, null, 2))
+  console.log(JSON.stringify(error, null, 2))
 
 export const onLoadStart = async (
   url: string,
