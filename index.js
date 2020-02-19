@@ -11,6 +11,7 @@ import {
   Modal,
   StyleSheet,
   Image,
+  ViewPropTypes,
   // $DisableFlow
 } from 'react-native'
 import { WebView } from 'react-native-webview'
@@ -204,10 +205,10 @@ export default class LinkedInModal extends React.Component {
     linkText: PropTypes.string,
     renderButton: PropTypes.func,
     renderClose: PropTypes.func,
-    containerStyle:  View.propTypes.style,
-    wrapperStyle:  View.propTypes.style,
-    closeStyle:  View.propTypes.style,
-    animationType: Modal.propTypes.animationType,
+    containerStyle:  ViewPropTypes.style,
+    wrapperStyle:  ViewPropTypes.style,
+    closeStyle:  ViewPropTypes.style,
+    // animationType: Modal.propTypes.animationType,
     shouldGetAccessToken: PropTypes.bool,
   }
   static defaultProps = {
