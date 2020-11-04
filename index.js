@@ -236,8 +236,8 @@ export default class LinkedInModal extends React.Component {
 
   onNavigationStateChange = async ({ url }: Object) => {
     const { raceCondition } = this.state
-    const { redirectUri, onError, shouldGetAccessToken } = this.props
-
+    const { redirectUri, onError, shouldGetAccessToken, onNavigationStateChange } = this.props
+    if (onNavigationStateChange) onNavigationStateChange(url);
     if (url.includes(redirectUri) && !raceCondition) {
       const { onSignIn, onSuccess } = this.props
       const { authState } = this.state
