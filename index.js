@@ -3,27 +3,29 @@
  * @flow
  */
 
-import React from 'react'
-import {
+ import React from 'react'
+ import {
   TouchableOpacity,
   View,
+  ViewPropTypes,
   Text,
   Modal,
   StyleSheet,
   Image,
-  ViewPropTypes,
-  // $DisableFlow
 } from 'react-native'
 import { WebView } from 'react-native-webview'
 import PropTypes from 'prop-types'
-import { pipe, evolve, propSatisfies, applySpec, propOr } from 'ramda'
+import { pipe, evolve, propSatisfies, applySpec, propOr, add } from 'ramda'
 import { v4 } from 'uuid'
 import querystring from 'query-string'
 
-const AUTHORIZATION_URL: string = 'https://www.linkedin.com/oauth/v2/authorization'
+const AUTHORIZATION_URL: string =
+  'https://www.linkedin.com/oauth/v2/authorization'
 const ACCESS_TOKEN_URL: string = 'https://www.linkedin.com/oauth/v2/accessToken'
+const LOGOUT_URL: string = 'https://www.linkedin.com/m/logout'
 
 export type LinkedInToken = {
+  authentication_code?: string,
   access_token?: string,
   expires_in?: number,
 }
@@ -37,6 +39,7 @@ type State = {
   raceCondition: boolean,
   modalVisible: boolean,
   authState: string,
+  logout: boolean,
 }
 
 /* eslint-disable */
@@ -58,9 +61,17 @@ type Props = {
   wrapperStyle?: any,
   closeStyle?: any,
   animationType?: 'none' | 'fade' | 'slide',
+  areaTouchText: {
+    top?: number, 
+    bottom?: number, 
+    left?: number, 
+    right?: number
+  },
   shouldGetAccessToken: boolean,
+  isDisabled?: boolean,
 }
 /* eslint-enable */
+
 
 export const cleanUrlString = (state: string) => state.replace('#!', '')
 
@@ -93,7 +104,7 @@ export const getAuthorizationUrl: Props => string = ({
   permissions,
   redirectUri,
 }) =>
-  `${AUTHORIZATION_URL}?${querystring.stringify({
+`${AUTHORIZATION_URL}?${querystring.stringify({
     response_type: 'code',
     client_id: clientID,
     scope: permissions.join(' ').trim(),
@@ -101,13 +112,13 @@ export const getAuthorizationUrl: Props => string = ({
     redirect_uri: redirectUri,
   })}`
 
-export const getPayloadForToken: (Props & { code: string }) => string = ({
-  clientID,
+  export const getPayloadForToken: (Props & { code: string }) => string = ({
+    clientID,
   clientSecret,
   code,
   redirectUri,
 }) =>
-  querystring.stringify({
+querystring.stringify({
     grant_type: 'authorization_code',
     code,
     redirect_uri: redirectUri,
@@ -115,11 +126,15 @@ export const getPayloadForToken: (Props & { code: string }) => string = ({
     client_secret: clientSecret,
   })
 
-export const injectedJavaScript = () =>
-  'document.querySelector("input[type=text]").setAttribute("autocapitalize", "off")'
+  export const injectedJavaScript = `
+  setTimeout(function() {
+    document.querySelector("input[type=text]").setAttribute("autocapitalize", "off");
+  }, 1);
+  true;
+`
 
 export const fetchToken: string => Promise<LinkedInToken> = async payload => {
-  const response = await fetch(ACCESS_TOKEN_URL, {
+    const response = await fetch(ACCESS_TOKEN_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -161,9 +176,9 @@ export const onLoadStart = async (
     }
   }
 }
-
+const closeSize = { width: 24, height: 24 }
 const styles = StyleSheet.create({
-  constainer: {
+  container: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     paddingVertical: 40,
@@ -182,11 +197,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: 'rgba(0, 0, 0, 0.4)',
-    width: 24,
-    height: 24,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+    ...closeSize,
   },
 })
 
@@ -203,18 +217,20 @@ export default class LinkedInModal extends React.Component {
     onClose: PropTypes.func,
     onSignIn: PropTypes.func,
     linkText: PropTypes.string,
+    areaTouchText: PropTypes.object,
     renderButton: PropTypes.func,
     renderClose: PropTypes.func,
-    containerStyle:  ViewPropTypes.style,
-    wrapperStyle:  ViewPropTypes.style,
-    closeStyle:  ViewPropTypes.style,
-    // animationType: Modal.propTypes.animationType,
+    containerStyle: ViewPropTypes.style,
+    wrapperStyle: ViewPropTypes.style,
+    closeStyle: ViewPropTypes.style,
+    animationType: PropTypes.string,
     shouldGetAccessToken: PropTypes.bool,
   }
   static defaultProps = {
     onError: logError,
-    permissions: ['r_liteprofile,r_emailaddress'],
+    permissions: ['r_liteprofile', 'r_emailaddress'],
     linkText: 'Login with LinkedIn',
+    areaTouchText: {top: 20, bottom: 20, left: 50, right: 50},
     animationType: 'fade',
     containerStyle: StyleSheet.create({}),
     wrapperStyle: StyleSheet.create({}),
@@ -225,6 +241,7 @@ export default class LinkedInModal extends React.Component {
     raceCondition: false,
     modalVisible: false,
     authState: v4(),
+    logout: false,
   }
 
   componentWillUpdate(nextProps: Props, nextState: State) {
@@ -242,7 +259,9 @@ export default class LinkedInModal extends React.Component {
       const { onSignIn, onSuccess } = this.props
       const { authState } = this.state
       this.setState({ modalVisible: false, raceCondition: true })
-      if (onSignIn) onSignIn()
+      if (onSignIn) {
+        onSignIn()
+      }
       await onLoadStart(
         url,
         authState,
@@ -259,7 +278,7 @@ export default class LinkedInModal extends React.Component {
     getAuthorizationUrl({ ...this.props, authState: this.state.authState })
 
   getAccessToken: string => Promise<LinkedInToken | {}> = async (code: string) => {
-    const { onError } = this.props
+      const { onError } = this.props
     const payload: string = getPayloadForToken({ ...this.props, code })
     const token = await fetchToken(payload)
     if (token.error) {
@@ -273,34 +292,77 @@ export default class LinkedInModal extends React.Component {
 
   close = () => {
     const { onClose } = this.props
-    if (onClose) onClose()
+    if (onClose) {
+      onClose()
+    }
     this.setState({ modalVisible: false })
   }
 
   open = () => {
     const { onOpen } = this.props
-    if (onOpen) onOpen()
+    if (onOpen) {
+      onOpen()
+    }
     this.setState({ modalVisible: true })
   }
 
+  logoutAsync = () =>
+    new Promise(resolve => {
+      this.setState({ logout: true })
+      setTimeout(() => {
+        this.setState({ logout: false })
+        resolve()
+      }, 3000)
+    })
+
   renderButton = () => {
-    const { renderButton, linkText } = this.props
-    if (renderButton) return renderButton()
-    return <Text>{linkText}</Text>
+    const { renderButton, linkText, areaTouchText, isDisabled = false } = this.props
+    if (renderButton) {
+      return(
+        <TouchableOpacity  
+        accessibilityComponentType={'button'}
+        accessibilityTraits={['button']}
+        onPress={this.open}
+        hitSlop={areaTouchText} 
+        disabled={isDisabled}>
+          {renderButton()}
+        </TouchableOpacity>
+      )
+    }
+    return (
+      <TouchableOpacity
+        accessibilityComponentType={'button'}
+        accessibilityTraits={['button']}
+        onPress={this.open}
+        hitSlop={areaTouchText}
+        disabled={isDisabled}
+      >
+        <Text>{linkText}</Text>
+      </TouchableOpacity>
+    )
   }
 
   renderClose = () => {
     const { renderClose } = this.props
-    if (renderClose) return renderClose()
+    if (renderClose) {
+      return renderClose()
+    }
     return (
-      // $DisableFlow
-      <Image source={require('./assets/x-white.png')} resizeMode="contain" />
+      <Image
+        source={require('./assets/x-white.png')}
+        resizeMode="contain"
+        style={{
+          ...evolve({ width: add(-8), height: add(-8) }, closeSize),
+        }}
+      />
     )
   }
 
   renderWebview = () => {
     const { modalVisible } = this.state
-    if (!modalVisible) return null
+    if (!modalVisible) {
+      return null
+    }
 
     return (
       <WebView
@@ -309,31 +371,34 @@ export default class LinkedInModal extends React.Component {
         startInLoadingState
         javaScriptEnabled
         domStorageEnabled
-        injectedJavaScript={injectedJavaScript()}
+        injectedJavaScript={injectedJavaScript}
+        sharedCookiesEnabled
+        incognito={true}
       />
     )
   }
 
   render() {
-    const { modalVisible } = this.state
-    const { animationType, containerStyle, wrapperStyle, closeStyle } = this.props
+    const { modalVisible, logout } = this.state
+    const {
+      animationType,
+      containerStyle,
+      wrapperStyle,
+      closeStyle,
+    } = this.props
     return (
       <View>
-        <TouchableOpacity
-          accessibilityComponentType={'button'}
-          accessibilityTraits={['button']}
-          onPress={this.open}
-        >
-          {this.renderButton()}
-        </TouchableOpacity>
+        {this.renderButton()}
         <Modal
           animationType={animationType}
           transparent
           visible={modalVisible}
           onRequestClose={this.close}
         >
-          <View style={[styles.constainer, containerStyle]}>
-            <View style={[styles.wrapper, wrapperStyle]}>{this.renderWebview()}</View>
+          <View style={[styles.container, containerStyle]}>
+            <View style={[styles.wrapper, wrapperStyle]}>
+              {this.renderWebview()}
+            </View>
             <TouchableOpacity
               onPress={this.close}
               style={[styles.close, closeStyle]}
@@ -344,6 +409,17 @@ export default class LinkedInModal extends React.Component {
             </TouchableOpacity>
           </View>
         </Modal>
+        {logout && (
+          <View style={{ width: 1, height: 1 }}>
+            <WebView
+              source={{ uri: LOGOUT_URL }}
+              javaScriptEnabled
+              domStorageEnabled
+              sharedCookiesEnabled
+              onLoadEnd={() => this.setState({ logout: false })}
+            />
+          </View>
+        )}
       </View>
     )
   }
